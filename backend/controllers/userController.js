@@ -2,6 +2,12 @@ import { UserSchema } from "../models/userModel.js"
 import bcrypt from 'bcrypt'
 import jwt from "jsonwebtoken"
 
+const getToken = (user) => {
+    const accessToken = jwt.sign(user,process.env.ACCESS_TOKEN,{expiresIn: 900})
+    const refreshToken = jwt.sign({_id:user._id},process.env.REFRESH_TOKEN,{expiresIn: '7d'})
+    return {accessToken,refreshToken}
+}
+
 export const register = async(req,res) => {
     try {
         const {fullName,username,password,confirmPassword,gender} = req.body
@@ -27,12 +33,28 @@ export const register = async(req,res) => {
         const maleProfilePhoto = `https://avatar.iran.liara.run/public/boy?username=${username}`
         const femaleProfilePhoto = `https://avatar.iran.liara.run/public/girl?username=${username}`
         
-        await UserSchema.create({
+        const newUser = new UserSchema({
             fullName,
             username,
             password,
             gender,
             profilePhoto: gender === 'male' ? maleProfilePhoto : femaleProfilePhoto
+        })
+        await newUser.save()
+
+        const {accessToken,refreshToken} = getToken(newUser.toObject())
+
+        res.cookie('at',accessToken,{
+            httpOnly: true,
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
+        })
+        res.cookie('rt',refreshToken,{
+            httpOnly: true,
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
         })
 
         res.json({
@@ -62,7 +84,7 @@ export const login = async(req,res) => {
         const user = await UserSchema.findOne({username})
         if(!user)
             return res.status(404).json({
-                message: 'username is not exist',
+                message: 'User not found',
                 success: false
             })
 
@@ -72,21 +94,27 @@ export const login = async(req,res) => {
                 message: 'Password Incorrect',
                 success: false
             })
+
+        res.clearCookie('at',)
+        res.clearCookie('rt',)
         
         // create token
-        const tokenData = {
-            userId : user._id
-        }
+        const {accessToken,refreshToken} = getToken(user.toObject())
 
-        const token = jwt.sign(tokenData,process.env.JWT_SECRET_KEY,{expiresIn: '7d'})
-
-        res.cookie('token',token,{
+        res.cookie('at',accessToken,{
             httpOnly: true,
-            maxAge: 86400000,
-            sameSite: 'strict',
-            secure: process.env.PROD === 'true' ? true : false,
-            domain: process.env.USER_AGENT  
-        }).json({
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
+        })
+        res.cookie('rt',refreshToken,{
+            httpOnly: true,
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
+        })
+
+        res.json({
             _id: user._id,
             username: user.username,
             fullName: user.fullName,
@@ -103,9 +131,19 @@ export const login = async(req,res) => {
 
 export const logout = async(req,res) => {
     try {
-        res.cookie('token','',{maxAge: 0}).json({
-            message: 'logged out successfully.'
+        res.clearCookie("at",{
+            httpOnly:true,
+            maxAge: 0,
+            secure: process.env.PROD === 'true' ? true : false,
+            domain : process.env.USER_AGENT
         })
+        res.clearCookie("rt",{
+            httpOnly:true,
+            maxAge: 0,
+            secure: process.env.PROD === 'true' ? true : false,
+            domain : process.env.USER_AGENT
+        })
+        res.json({success : true})
     } catch (error) {
         res.status(500).json({
             message: error.message,
@@ -135,20 +173,22 @@ export const refreshToken = async(req,res) => {
         if(!user) 
             return res.status(400).send("bad request")
 
-        // create token
-        const tokenData = {
-            userId : user._id
-        }
+       const {accessToken,refreshToken} = getToken(user.toObject())
 
-        const token = jwt.sign(tokenData,process.env.JWT_SECRET_KEY,{expiresIn: '7d'})
-
-        res.cookie('token',token,{
+        res.cookie('at',accessToken,{
             httpOnly: true,
-            maxAge: 86400000,
-            sameSite: 'strict',
-            secure: process.env.PROD === 'true' ? true : false,
-            domain: process.env.USER_AGENT  
-        }).json({
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
+        })
+        res.cookie('rt',refreshToken,{
+            httpOnly: true,
+            maxAge: 900000,
+            secure: process.env.PROD === 'true' ? true: false,
+            domain: process.env.USER_AGENT
+        })
+        
+        res.json({
             _id: user._id,
             username: user.username,
             fullName: user.fullName,

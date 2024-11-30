@@ -12,7 +12,7 @@ const Signup = () => {
     const handleSubmit = async(values) => {
         try{
             const {data} = await http.post('/api/v1/user/register',values)
-            navigate('/login')
+            navigate('/chat')
             form.resetFields()
             message.success(data.message)
         }catch(error){
